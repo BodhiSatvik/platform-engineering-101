@@ -1,0 +1,24 @@
+{
+  "name": "Platform Engineering 101",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": { "helm": "none", "minikube": "none" },
+    "ghcr.io/devcontainers/features/sshd:1": {}
+  },
+  "hostRequirements": { "cpus": 4, "memory": "8gb" },
+  "remoteEnv": {
+    "PATH": "${containerWorkspaceFolder}/bin:${containerWorkspaceFolder}/.venv/bin:${containerEnv:PATH}"
+  },
+  "postCreateCommand": "./setup/setup.sh",
+  "postStartCommand": "bash -c 'for i in $(seq 20); do docker start pe101-control-plane >/dev/null 2>&1 && exit 0; sleep 2; done; true'",
+  "forwardPorts": [8080, 8081],
+  "portsAttributes": {
+    "8080": { "label": "Lab 1: your app" },
+    "8081": { "label": "Lab 2: your app on the platform" }
+  },
+  "customizations": {
+    "codespaces": { "openFiles": ["README.md"] },
+    "vscode": { "extensions": ["redhat.vscode-yaml"] }
+  }
+}

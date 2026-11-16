@@ -1,0 +1,24 @@
+# Lab 1, step 4: run the app, the way a busy developer writes it on a Friday afternoon.
+# A Deployment tells Kubernetes "keep this many copies of this container running".
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coffee
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: coffee}
+  template:
+    metadata:
+      labels: {app: coffee}            # the Service in step 5 finds the pods by this label
+    spec:
+      containers:
+      - name: coffee
+        image: coffee:v1               # the image you built in step 1
+        env:
+        - name: DATABASE_URL           # user:password@host:port/database. Yes, the password again, in a second file.
+          value: postgresql://coffee:coffee-is-life@postgress:5432/coffee
+        ports:
+        - containerPort: 8080
+      # Not here: CPU and memory limits, health checks, a non-root setting, network rules.
+      # It works on my machine. Ship it?

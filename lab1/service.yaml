@@ -1,0 +1,12 @@
+# Lab 1, step 5: give the app a stable address inside the cluster.
+# Pods come and go and get new IP addresses. A Service keeps one name ("coffee")
+# and sends traffic to every pod with the label app: coffee.
+apiVersion: v1
+kind: Service
+metadata:
+  name: coffee
+spec:
+  selector: {app: coffee}
+  ports:
+  - port: 80            # the port other apps call
+    targetPort: 8080    # the port the container listens on

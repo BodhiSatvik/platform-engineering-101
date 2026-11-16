@@ -1,0 +1,6 @@
+# Lab 2: everything the platform needs to know about your app.
+name: coffee
+image: coffee:v1            # the same image you built in Lab 1
+plan: small                 # small, medium or large: the platform picks CPU and memory
+replicas: {min: 2, max: 4}  # the platform keeps 2 copies, and adds up to 4 when busy
+database: postgres          # the platform runs a Postgres database for you

@@ -1,0 +1,5 @@
+# Tools that setup/setup.sh downloads
+bin/kind
+bin/kubectl-audit_tenant
+.venv/
+__pycache__/

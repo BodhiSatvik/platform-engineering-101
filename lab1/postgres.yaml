@@ -1,0 +1,49 @@
+# Lab 1, step 3: run your own database.
+# Three objects: a Secret (the password), a Deployment (the database) and a Service (its address).
+
+# The password, in plain text, in a file in your git repo.
+# Anyone who can read the repo can read your database. Security would not approve this.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres
+stringData:
+  POSTGRES_PASSWORD: coffee-is-life
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1                        # one copy: if it goes down, so does every order
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:17-alpine
+        env:
+        - {name: POSTGRES_USER, value: coffee}
+        - {name: POSTGRES_DB, value: coffee}
+        - name: POSTGRES_PASSWORD
+          valueFrom: {secretKeyRef: {name: postgres, key: POSTGRES_PASSWORD}}
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - {name: data, mountPath: /var/lib/postgresql/data}
+      volumes:
+      - name: data
+        emptyDir: {}                     # the data lives only as long as this pod. Remember this in step 6.
+---
+# A stable name ("postgres") that other pods can use to find the database.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector: {app: postgres}
+  ports:
+  - port: 5432

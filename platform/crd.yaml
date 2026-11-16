@@ -1,0 +1,43 @@
+# The platform's API. It adds one new kind of object to Kubernetes: Application.
+# The API server checks every Application against this schema before it stores it,
+# so a bad request fails at once, with a message that names the field.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: applications.platform.example.com
+spec:
+  group: platform.example.com
+  scope: Cluster
+  names: {kind: Application, plural: applications, singular: application}
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    subresources: {status: {}}
+    additionalPrinterColumns:
+    - {name: Phase, type: string, jsonPath: .status.phase}
+    - {name: Message, type: string, jsonPath: .status.message}
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required: [image]
+            properties:
+              image: {type: string, minLength: 1}
+              port: {type: integer, minimum: 1024, maximum: 65535, default: 8080}
+              plan: {type: string, enum: [small, medium, large], default: small}
+              database: {type: string, enum: [none, postgres], default: none}
+              replicas:
+                type: object
+                default: {min: 2, max: 4}
+                properties:
+                  min: {type: integer, minimum: 1, maximum: 5, default: 2}
+                  max: {type: integer, minimum: 1, maximum: 10, default: 4}
+                x-kubernetes-validations:
+                - rule: self.min <= self.max
+                  message: replicas.min must not be more than replicas.max
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
