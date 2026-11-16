@@ -220,7 +220,7 @@ Expect this last line:
 | Fenced off from other teams | ✗ 3 of 14 checks |
 | HTTPS, a DNS name, alerts, backups, the same again for staging and production | ✗ not even started |
 
-You wrote **85 lines of YAML in 3 files**, ran 6 setup commands, fixed a crash and learned about 15 new words. Every app team at your company does all of this, each a little differently, and keeps it up to date forever.
+You wrote **85 lines of YAML in 3 files**, ran 6 setup commands, fixed a crash and learned about 15 new words. You also had to hear from **5 people**: your tech lead, the cluster admin, the front-end team, the reliability team and security. That is two kinds of *glue*, the work that holds the parts together: the files you wrote, and the people you had to hear from. Every app team at your company does all of this, each a little differently, and keeps it up to date forever.
 
 ---
 
@@ -311,7 +311,7 @@ The platform checks every request before it changes anything, and tells you how 
 kubectl get all,quota,limitrange,networkpolicy,serviceaccount,rolebinding,secret,pvc,clusters.postgresql.cnpg.io -n coffee
 ```
 
-About 25 objects of 13 kinds, from your 5 lines. Then open `platform/operator.py` and find `APP = Template`. That is the Deployment the platform wrote for you. Compare it with your `lab1/deployment.yaml`: CPU and memory sizes, two health checks (`/healthz`: is it alive? `/ready`: can it serve?), non-root, no extra Linux privileges. The password lives in the Secret `coffee-db-app`. The database made it, nobody typed it, and it is in no file in your repo.
+About 25 objects of 13 kinds, from your 5 lines. Then open `platform/operator.py` and find `APP = Template`. That is the Deployment the platform wrote for you. Compare it with your `lab1/deployment.yaml`: CPU and memory sizes, two health checks (`/healthz`: is it alive? `/ready`: can it serve?), non-root, no extra Linux privileges. The password lives in the Secret `coffee-db-app`. The database made it, nobody typed it, and it is in no file in your repo. Now find `DATABASE_URL` in `platform/operator.py`: the platform hands your app the database's address and password from that Secret. Nobody types them, so the Lab 1 typo (`postgress`) cannot happen here.
 
 **At a big company.** This is what a platform team builds: one API for many teams, guardrails built in, the cluster's details hidden. Many large companies run a platform like this. Some also handle databases, message queues and caches through the same API.
 
@@ -354,11 +354,14 @@ platform restart coffee
 
 `restart` replaces the copies one at a time, so the app stays up. It is an *action*: it does not change what you asked for in `lab2/app.yaml`.
 
+**At a big company.** You still own your app. If your code breaks at 3 a.m., your team gets the call. The platform team gets the call for the platform: the database, the network rules, the control loop. `platform status` and `platform logs` help you see which side has the problem before you call anyone.
+
 ### Lab 1 and Lab 2, side by side
 
 | | Lab 1: on your own | Lab 2: with a platform |
 |---|---|---|
 | You wrote | 85 lines of YAML in 3 files, plus 6 commands | 5 lines |
+| People you had to hear from | 5: tech lead, cluster admin, front-end, reliability, security | none: the platform answers their requests, for every team |
 | Time | about 35 minutes, with a crash to debug | about 1 minute |
 | The database password | in plain text, in two files | generated, seen by no one |
 | A database pod restarts | orders lost | orders kept |
@@ -406,6 +409,8 @@ kubectl audit-tenant -n coffee --as system:serviceaccount:coffee:team
 Run the connection test again: it now times out. Refresh port 8081: your app still works and still talks to its own database.
 
 One change by the platform team, and every team gets it, without a ticket or a meeting. That is the *leverage* of platform engineering.
+
+**At a big company.** One change reached every team at once. A mistake would too. So platform teams review each change, test it, and roll it out in stages: first to a few teams that can live with a problem, then to everyone. Here you edited a file and restarted the control loop by hand, which is fine on a lab cluster.
 
 ---
 
