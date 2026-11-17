@@ -84,6 +84,11 @@ check "9 status Ready" 'platform status | grep -q -E "coffee +Ready"'
 check "9 logs show requests" 'platform logs coffee | grep -q GET'
 check "9 restart works" 'platform restart coffee 2>&1 | grep -q "all copies restarted"'
 
+echo "== platform behavior (not a README step)"
+sed 's/coffee:v1 /coffee:v9 /' lab2/app.yaml >"$W/v9.yaml"
+check "a missing image fails fast, with a fix" 'platform deploy "$W/v9.yaml" 2>&1 | grep -q "cannot find coffee:v9"'
+check "deploying the old file again rolls back" 'platform deploy lab2/app.yaml 2>&1 | grep -q "ready in"'
+
 echo "== Lab 3"
 reach='kubectl -n coffee exec deploy/coffee -- python -c "import socket; socket.create_connection((\"postgres.coffee-diy\", 5432), 3)" >/dev/null 2>&1'
 check "before: the app can reach the other team's database" "$reach"

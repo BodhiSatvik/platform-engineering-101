@@ -194,9 +194,23 @@ spec:
 @kopf.on.resume("platform.example.com", "v1", "applications")
 def reconcile(name, uid, spec, meta, logger, **_):
     progress = Progress(name, meta["generation"], logger)
+    try:
+        build(name, uid, spec, progress)
+    except Failed as failure:  # the status says what is wrong and how to fix it; keep_trying retries
+        progress.fail(str(failure), retry=failure.retry)
+
+
+@kopf.timer("platform.example.com", "v1", "applications", interval=20, idle=10)
+def keep_trying(name, uid, spec, meta, status, logger, **_):
+    """A control loop does not give up: it retries a failed app until the cluster matches the request."""
+    if status.get("phase") == "Failed" and status.get("retry", True):
+        reconcile(name=name, uid=uid, spec=spec, meta=meta, logger=logger)
+
+
+def build(name, uid, spec, progress):
     if not re.fullmatch(r"[a-z]([-a-z0-9]{0,28}[a-z0-9])?", name):
-        progress.fail("name: use 1 to 30 lowercase letters, digits and dashes. It becomes your namespace name.")
-        raise kopf.PermanentError("invalid name")
+        raise Failed("name: use 1 to 30 lowercase letters, digits and dashes. It becomes your namespace name.",
+                     retry=False)
 
     plan, low, high = spec["plan"], spec["replicas"]["min"], spec["replicas"]["max"]
     cpu_req, mem_req, cpu_lim, mem_lim = PLANS[plan]
@@ -219,14 +233,14 @@ def reconcile(name, uid, spec, meta, logger, **_):
     env = []
     if database:
         apply(POSTGRES.substitute(name=name, db_cpu_req=db[0], db_mem_req=db[1], db_cpu_lim=db[2], db_mem_lim=db[3]))
-        wait_for_database(progress, name)
+        wait_for_database(name)
         env = [{"name": "DATABASE_URL", "valueFrom": {"secretKeyRef": {"name": f"{name}-db-app", "key": "uri"}}}]
         progress.step("database: Postgres with a generated password that no person has seen")
 
     apply(APP.substitute(
         name=name, image=json.dumps(spec["image"]), port=spec["port"], env=json.dumps(env),
         min=low, max=high, **sizes))
-    wait_for_app(progress, name, low, spec["image"])
+    wait_for_app(name, low, spec["image"])
     progress.step(f"app: {low} copies running as non-root, with health checks, {plan} size")
     progress.step(f"autoscaler: {low} to {high} copies, adds copies when CPU passes 70%")
     progress.done(f"{low} copies running")
@@ -234,11 +248,19 @@ def reconcile(name, uid, spec, meta, logger, **_):
 
 # ---------------------------------------------------------------- helpers
 
+class Failed(Exception):
+    """A step that did not work, in words the app team can act on."""
+
+    def __init__(self, message, retry=True):
+        super().__init__(message)
+        self.retry = retry
+
+
 def kubectl(*args, stdin=None):
     """Run kubectl. Return its output, or raise with kubectl's own words."""
     result = subprocess.run(["kubectl", *args], input=stdin, capture_output=True, text=True)
     if result.returncode != 0:
-        raise kopf.TemporaryError(result.stderr.strip() or result.stdout.strip(), delay=15)
+        raise Failed(result.stderr.strip() or result.stdout.strip())
     return result.stdout
 
 
@@ -246,28 +268,29 @@ def apply(manifest):
     kubectl("apply", "--server-side", "--force-conflicts", "--field-manager=platform", "-f", "-", stdin=manifest)
 
 
-def wait_for_database(progress, name):
+def wait_for_database(name):
     try:
         kubectl("-n", name, "wait", "--for=condition=Ready", f"clusters.postgresql.cnpg.io/{name}-db", "--timeout=240s")
-    except kopf.TemporaryError:  # the platform's side failed, not the app team's: say so
-        progress.fail("database: not ready yet. The platform keeps trying. If this lasts, tell the platform team.")
-        raise
+    except Failed:  # the platform's side failed, not the app team's: say so
+        raise Failed("database: not ready yet. The platform keeps trying. If this lasts, tell the platform team.")
 
 
-def wait_for_app(progress, name, copies, image):
+def wait_for_app(name, copies, image):
     """Wait for the copies to be ready. If they cannot start, stop early and say how to fix it."""
+    fields = "{.metadata.generation} {.status.observedGeneration} {.status.replicas} {.status.updatedReplicas} {.status.readyReplicas}"
     for _ in range(40):  # about two minutes
-        if int(kubectl("-n", name, "get", "deploy", name, "-o", "jsonpath={.status.readyReplicas}") or 0) >= copies:
+        values = kubectl("-n", name, "get", "deploy", name, "-o", f"jsonpath={fields}").split(" ")
+        generation, seen, total, updated, ready = (int(value or 0) for value in values)
+        # Done only when every copy runs the new version: during a rollout the old copies are still "ready".
+        if seen >= generation and total == updated and updated >= copies and ready >= copies:
             return
         reasons = kubectl("-n", name, "get", "pods", "-l", f"app={name}", "-o",
                           "jsonpath={.items[*].status.containerStatuses[*].state.waiting.reason}")
         problem = diagnose(name, reasons, image)
         if problem:
-            progress.fail(problem)
-            raise kopf.TemporaryError(problem, delay=20)  # try again later: the fix may land meanwhile
+            raise Failed(problem)
         time.sleep(3)
-    progress.fail(f"app: not ready after two minutes. see what is happening: platform logs {name}")
-    raise kopf.TemporaryError("app not ready", delay=20)
+    raise Failed(f"app: not ready after two minutes. see what is happening: platform logs {name}")
 
 
 def diagnose(name, reasons, image):
@@ -288,7 +311,7 @@ class Progress:
 
     def __init__(self, name, generation, logger):
         self.name, self.generation, self.logger, self.steps = name, generation, logger, []
-        self._write(phase="Provisioning", message="starting")
+        self._write(phase="Provisioning", message="starting", retry=None)
 
     def step(self, text):
         self.steps.append(text)
@@ -298,9 +321,9 @@ class Progress:
     def done(self, message):
         self._write(phase="Ready", message=message)
 
-    def fail(self, message):
+    def fail(self, message, retry=True):
         self.logger.error(message)
-        self._write(phase="Failed", message=message)
+        self._write(phase="Failed", message=message, retry=retry)
 
     def _write(self, **status):
         status.update(steps=self.steps, observedGeneration=self.generation)
