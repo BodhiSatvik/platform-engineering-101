@@ -70,6 +70,12 @@ check "4 order shows on 8081" 'curl -s localhost:8081/ | grep -q "<b>Ada</b>"'
 edit 's/plan: small /plan: huge  /' lab2/app.yaml
 check "5 bad plan rejected, with a fix" 'platform deploy lab2/app.yaml 2>&1 | grep -q "fix: use one of"'
 edit 's/plan: huge  /plan: small /' lab2/app.yaml
+edit 's/image: coffee:v1 /image: coffee:v2 /' lab2/app.yaml
+platform deploy lab2/app.yaml >"$W/v2.out" 2>&1
+check "5 a missing image fails fast, with a fix" 'grep -q "cannot find coffee:v2" "$W/v2.out" && grep -q "fix: build it" "$W/v2.out"'
+edit 's/image: coffee:v2 /image: coffee:v1 /' lab2/app.yaml
+platform deploy lab2/app.yaml >"$W/rollback.out" 2>&1
+check "5 deploying the old file again rolls back" 'grep -q "ready in" "$W/rollback.out"'
 n=$(kubectl get all,quota,limitrange,networkpolicy,serviceaccount,rolebinding,secret,pvc,clusters.postgresql.cnpg.io -n coffee --no-headers 2>/dev/null | wc -l | tr -d ' ')
 check "6 behind the curtain: about 25 objects ($n)" '[ "$n" -ge 20 ]'
 kubectl -n coffee delete pod -l cnpg.io/cluster=coffee-db >/dev/null
@@ -83,11 +89,6 @@ check "8 audit: 13 passed, 1 failed (AT-08)" 'kubectl audit-tenant -n coffee --a
 check "9 status Ready" 'platform status | grep -q -E "coffee +Ready"'
 check "9 logs show requests" 'platform logs coffee | grep -q GET'
 check "9 restart works" 'platform restart coffee 2>&1 | grep -q "all copies restarted"'
-
-echo "== platform behavior (not a README step)"
-sed 's/coffee:v1 /coffee:v9 /' lab2/app.yaml >"$W/v9.yaml"
-check "a missing image fails fast, with a fix" 'platform deploy "$W/v9.yaml" 2>&1 | grep -q "cannot find coffee:v9"'
-check "deploying the old file again rolls back" 'platform deploy lab2/app.yaml 2>&1 | grep -q "ready in"'
 
 echo "== Lab 3"
 reach='kubectl -n coffee exec deploy/coffee -- python -c "import socket; socket.create_connection((\"postgres.coffee-diy\", 5432), 3)" >/dev/null 2>&1'

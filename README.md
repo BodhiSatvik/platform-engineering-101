@@ -303,6 +303,43 @@ platform deploy lab2/app.yaml
 
 The platform checks every request before it changes anything, and tells you how to fix it. Your app keeps running. Change it back to `small`.
 
+Now a mistake that the check cannot catch. Change `image: coffee:v1` to `image: coffee:v2`, a version nobody built, and deploy again:
+
+```bash
+platform deploy lab2/app.yaml
+```
+
+```text
+▸ deploying coffee
+  ✓ request accepted: the platform takes it from here
+  ✓ workspace: namespace coffee, with a budget, default limits, pod security and network rules  1s
+  ✓ team access: your team can work inside coffee, and nowhere else  1s
+  ✓ database: Postgres with a generated password that no person has seen  1s
+  ✗ image: the cluster cannot find coffee:v2.
+    fix: build it and load it into the cluster: docker build -t coffee:v2 app && kind load docker-image coffee:v2 --name pe101
+```
+
+The request was valid, so the platform tried it. The new copy could not start, so the platform found out why and told you: the problem is in your image, not in the platform, and here is the fix. In Lab 1 you read logs and events to find that out. Your app keeps running: the old copies serve until new ones are ready.
+
+Roll back. Change the image back to `coffee:v1` and deploy again:
+
+```bash
+platform deploy lab2/app.yaml
+```
+
+```text
+▸ deploying coffee
+  ✓ request accepted: the platform takes it from here
+  ✓ workspace: namespace coffee, with a budget, default limits, pod security and network rules  1s
+  ✓ team access: your team can work inside coffee, and nowhere else  1s
+  ✓ database: Postgres with a generated password that no person has seen  1s
+  ✓ app: 2 copies running as non-root, with health checks, small size  4s
+  ✓ autoscaler: 2 to 4 copies, adds copies when CPU passes 70%  4s
+➜ ready in 4s. open it: platform open coffee
+```
+
+**At a big company.** When an app team cannot tell who broke what, it asks the platform team, and those questions pile up. An error that names the side and the fix answers the question before anyone asks.
+
 ### Step 6. Look behind the curtain
 
 **Why.** The platform is not magic. It writes the same kinds of objects you wrote in Lab 1, plus the ones you did not have time for.
